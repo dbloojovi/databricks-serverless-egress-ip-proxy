@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf update -y
+dnf install -y nginx-mod-stream
+
+cat > /etc/nginx/nginx.conf <<'NGINX_EOF'
+${nginx_conf}
+NGINX_EOF
+
+nginx -t
+systemctl enable --now nginx
