@@ -45,19 +45,49 @@ variable "databricks_egress_cidrs" {
   ]
 }
 
+variable "backends" {
+  description = "External services to expose through the static egress IP. Each entry creates one NLB listener + target group + NGINX upstream. Set `upstream_port` only if it differs from `port` (default same)."
+  type = list(object({
+    name          = string
+    port          = number
+    upstream_host = string
+    upstream_port = optional(number)
+  }))
+  default = []
+}
+
+variable "enable_rds_test" {
+  description = "Deploy a self-contained RDS PostgreSQL instance and wire it as a backend on NLB port 5433. Use this to validate the static egress IP works end-to-end. Disable once validated."
+  type        = bool
+  default     = true
+}
+
+locals {
+  rds_test_backend = var.enable_rds_test ? [{
+    name          = "rds-test"
+    port          = 5433
+    upstream_host = module.rds[0].endpoint
+    upstream_port = 5432
+  }] : []
+}
+
 module "egress" {
   source = "../../modules/serverless-egress-static-ip"
 
   name_prefix             = var.name_prefix
   azs                     = var.azs
   databricks_egress_cidrs = var.databricks_egress_cidrs
-  backends = [
-    {
-      name          = "postgres"
-      port          = 5432
-      upstream_host = "ep-empty-voice-d12ttxav.database.us-west-2.cloud.databricks.com"
-    },
-  ]
+  backends                = concat(var.backends, local.rds_test_backend)
+}
+
+module "rds" {
+  count  = var.enable_rds_test ? 1 : 0
+  source = "../../modules/rds-test"
+
+  name_prefix             = var.name_prefix
+  azs                     = var.azs
+  nat_eip_public_ip       = module.egress.nat_eip_public_ip
+  databricks_egress_cidrs = var.databricks_egress_cidrs
 }
 
 output "nat_eip_public_ip" {
@@ -79,4 +109,18 @@ output "private_subnet_ids" {
 
 output "nlb_dns_name" {
   value = module.egress.nlb_dns_name
+}
+
+output "rds_endpoint" {
+  description = "RDS hostname (connect via NLB port 5433). Null if enable_rds_test = false."
+  value       = var.enable_rds_test ? module.rds[0].endpoint : null
+}
+
+output "rds_username" {
+  value = var.enable_rds_test ? module.rds[0].username : null
+}
+
+output "rds_password" {
+  value     = var.enable_rds_test ? module.rds[0].password : null
+  sensitive = true
 }

@@ -2,3 +2,24 @@ aws_profile = "my-aws-profile"
 aws_region  = "us-west-2"
 name_prefix = "my-company-egress"
 azs         = ["us-west-2a", "us-west-2b"]
+
+# Set to false once you've validated the static IP works.
+enable_rds_test = true
+
+# Your real external services. Each entry adds one NLB listener + target group + NGINX upstream.
+# `port` is what Databricks Serverless connects to on the NLB.
+# `upstream_host` is the real database hostname.
+# `upstream_port` is optional — defaults to `port` if the upstream listens on the same port.
+backends = [
+  {
+    name          = "analytics-postgres"
+    port          = 5432
+    upstream_host = "analytics-db.abc123.us-west-2.rds.amazonaws.com"
+  },
+  {
+    name          = "billing-postgres"
+    port          = 5434
+    upstream_host = "billing-db.xyz789.us-west-2.rds.amazonaws.com"
+    upstream_port = 5432
+  },
+]
